@@ -1,0 +1,11 @@
+Prerequiste Packages-
+1. Keras
+2. Tensorflow
+3. VGG16
+4. argparse
+5. from keras.models import Sequential
+6. from keras.applications.vgg16 import preprocess_input
+7. from keras.preprocessing.image import img_to_array
+8. from keras.applications.vgg16 import VGG16
+9. from keras.layers.core import Dense,Flatten
+10. cv2

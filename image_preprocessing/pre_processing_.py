@@ -15,6 +15,7 @@ import json
 import math
 import os
 import re
+import random
 import numpy as np
 import tensorflow as tf
 from scipy import ndimage
@@ -130,12 +131,33 @@ class ImagePreprocessing:
         cvImgHisEqulColorList = self.his_equl_color(cvImg)
         self.saveCvImage(cvImgHisEqulColorList, "hisEqulColor", filename, suffix, savepath)
 
+        # poisson noise
+        cvImg = cv2.imread(picname)
+        cvImgPoissonNoiseList = self.poisson_noise(cvImg)
+        self.saveCvImage(cvImgPoissonNoiseList, "poissonNoise", filename, suffix, savepath)
+        
+        # speckle noise
+        cvImg = cv2.imread(picname)
+        cvImgSpeckleNoiseList = self.speckle_noise(cvImg)
+        self.saveCvImage(cvImgSpeckleNoiseList, "speckleNoise", filename, suffix, savepath)
+        
+        # affine transform
+        cvImg = cv2.imread(picname)
+        cvImgAffineTransformList = self.affine_transform(cvImg)
+        self.saveCvImage(cvImgAffineTransformList, "affineTransform", filename, suffix, savepath)
+        
         # adjust scale
         if self.process_config['scale']:
             cvImg = cv2.imread(picname)
             cvImgScaleList = self.scale(cvImg)
             self.saveCvImage(cvImgScaleList, "scale", filename, suffix, savepath)
-
+        
+        # translation
+        if self.process_config['translation']:
+            cvImg = cv2.imread(picname)
+            cvImgTranslationList = self.translation(cvImg)
+            self.saveCvImage(cvImgTranslationList, "translation", filename, suffix, savepath)
+            
         # adjust sharpening
         if self.process_config['sharpening']:
             cvImg = cv2.imread(picname)
@@ -154,7 +176,7 @@ class ImagePreprocessing:
             cvImgBilateralBlurList = self.bilateral_blur(cvImg)
             self.saveCvImage(cvImgBilateralBlurList, "bilateralBlur", filename, suffix, savepath)
 
-            # denoising
+        # denoising
         if self.process_config['denoising']:
             cvImg = cv2.imread(picname)
             cvImgDenoisingList = self.denoising(cvImg)
@@ -165,6 +187,12 @@ class ImagePreprocessing:
             cvImg = cv2.imread(picname)
             cvImgGuassianBlurList = self.guassian_blur(cvImg)
             self.saveCvImage(cvImgGuassianBlurList, "guassianBlur", filename, suffix, savepath)
+            
+        # salt and pepper noise
+        if self.process_config['salt_and_pepper']:
+            cvImg = cv2.imread(picname)
+            cvImgSaltAndPepperList = self.salt_and_pepper_noise(cvImg)
+            self.saveCvImage(cvImgSaltAndPepperList, "saltAndPepperNoise", filename, suffix, savepath)
 
     def tf_augment(self, image, savepath, filename, suffix, function, paramater):
         """
@@ -352,6 +380,15 @@ class ImagePreprocessing:
                 rotated = imutils.rotate(image, angle)
             rotation_list.append((rotated, "rotate" + str(angle) + "degree"))
         return rotation_list
+    
+    def translation(self, image):
+        rst = []
+        num_rows, num_cols = image.shape[:2]
+        for item in self.process_config['translation']:
+            translation_matrix = np.float32(item.translation_matrix)
+            img_translation = cv2.warpAffine(image, translation_matrix, (num_cols, num_rows))
+            rst.append((img_translation, "translation"))
+        return rst
 
     def sharpening(self, image):
         rst = []
@@ -423,8 +460,54 @@ class ImagePreprocessing:
             para_desc = "rescale-X_%s_rescale-Y_%s" % (x, y)
             rst.append((rst_img, para_desc))
         return rst
+    
+    def salt_and_pepper_noise(self, image):
+        rst  = []
+        row,col,ch = image.shape
+        
+        for item in self.process_config['salt_and_pepper']:
+            rst_img = np.copy(image)
+            s_vs_p = float(item['s_vs_p'])
+            amount = float(item['amount'])
+            # Salt mode
+            num_salt = np.ceil(amount * image.size * s_vs_p)
+            coords = [np.random.randint(0, i - 1, int(num_salt))
+                      for i in image.shape]
+            rst_img[coords] = 1
+        
+            # Pepper mode
+            num_pepper = np.ceil(amount* image.size * (1. - s_vs_p))
+            coords = [np.random.randint(0, i - 1, int(num_pepper))
+                      for i in image.shape]
+            rst_img[coords] = 0
+            para_desc = "salt-vs-pepper_%s_amount_%s" % (s_vs_p, amount)
+            rst.append((rst_img, para_desc))
+        return rst
+    
+    def poisson_noise(self, image):
+        vals = len(np.unique(image))
+        vals = 2 ** np.ceil(np.log2(vals))
+        noisy = np.random.poisson(image * vals) / float(vals)
+        return [(noisy, "poisson_noise")]
+    
+    def speckle_noise(self, image):
+        row,col,ch = image.shape
+        gauss = np.random.randn(row,col,ch)
+        gauss = gauss.reshape(row,col,ch)        
+        noisy = image + image * gauss
+        return [(noisy, "speckle_noise")]
 
-
+    def affine_transform(self, image):
+        rows, cols, ch = image.shape
+        cv2.circle(image, (83, 90), 5, (0, 0, 255), -1)
+        cv2.circle(image, (447, 90), 5, (0, 0, 255), -1)
+        cv2.circle(image, (83, 472), 5, (0, 0, 255), -1)
+        pts1 = np.float32([[83, 90], [447, 90], [83, 472]])
+        pts2 = np.float32([[0, 0], [447, 90], [150, 472]])
+        matrix = cv2.getAffineTransform(pts1, pts2)
+        rst_img = cv2.warpAffine(image, matrix, (cols, rows))
+        return [(rst_img, "affine_transform")]
+        
 def test():
     print("begin to enhance picture data!!!")
 
